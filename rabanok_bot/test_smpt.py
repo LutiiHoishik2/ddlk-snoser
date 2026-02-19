@@ -1,7 +1,7 @@
 import smtplib
 import asyncio
 
-async def test_email(email, password):
+async def check_email_smtp(email, password):
     """Протестировать одну почту"""
     print(f"\n🔍 Тестируем {email}")
     
@@ -45,7 +45,7 @@ async def main():
     
     valid_count = 0
     for account in test_accounts:
-        if await test_email(account["email"], account["password"]):
+        if await check_email_smtp(account["email"], account["password"]):
             valid_count += 1
     
     print(f"\n{'='*50}")
