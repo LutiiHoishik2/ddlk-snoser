@@ -1,0 +1,32 @@
+{
+  "start": {
+    "minute": 3,
+    "hour": 10,
+    "day": 50,
+    "description": "Лимиты для команды /start"
+  },
+  "report": {
+    "minute": 2,
+    "hour": 20,
+    "day": 200,
+    "description": "Лимиты для отправки репортов"
+  },
+  "nuke": {
+    "minute": 1,
+    "hour": 5,
+    "day": 20,
+    "description": "Лимиты для NUKE операций"
+  },
+  "balance": {
+    "minute": 5,
+    "hour": 30,
+    "day": 100,
+    "description": "Лимиты для проверки баланса"
+  },
+  "payment": {
+    "minute": 3,
+    "hour": 15,
+    "day": 50,
+    "description": "Лимиты для платежей"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "common_usernames": [
+    "user", "bot", "test", "temp", "account",
+    "admin", "support", "helper", "service",
+    "telegram", "tg", "сессия", "session"
+  ],
+  "suspicious_patterns": [
+    "mass_report",
+    "spam_nuke",
+    "flood_start",
+    "rapid_commands",
+    "same_text_repeated"
+  ],
+  "botnet_commands": [
+    "/start /start /start",
+    "/report спам /report спам",
+    "массовая_рассылка"
+  ]
+}
