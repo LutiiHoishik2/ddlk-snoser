@@ -1,10 +1,11 @@
 from aiogram import Bot, Router, F
+from aiogram.filters import StateFilter
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from services.balance_service import BalanceService
 from services.payment_service import PaymentService
 from utils.keyboards import Keyboards
-from utils.states import UserStates
+from utils.states import BalanceStates
 from core.database import Database
 from core.config import Config
 import logging
@@ -34,7 +35,7 @@ class BalanceHandlers:
         router.callback_query.register(self.check_payment_status, F.data.startswith("check_payment_"))
         
         # Message хендлеры
-        router.message.register(self.process_deposit_amount, UserStates.waiting_deposit_amount)
+        router.message.register(self.process_deposit_amount, StateFilter(BalanceStates.waiting_deposit_amount))
 
     def _get_user_balance_data(self, user_id: int) -> tuple:
         """Получить данные о балансе пользователя из базы"""
@@ -76,7 +77,7 @@ class BalanceHandlers:
 
     async def start_deposit(self, callback: CallbackQuery, state: FSMContext):
         """Начать пополнение баланса"""
-        await state.set_state(UserStates.waiting_deposit_amount)
+        await state.set_state(BalanceStates.waiting_deposit_amount)
         min_deposit = Config.BALANCE_CONFIG["min_deposit"]
         
         await callback.message.edit_text(
