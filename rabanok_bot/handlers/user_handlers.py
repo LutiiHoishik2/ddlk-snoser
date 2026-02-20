@@ -1,5 +1,4 @@
 import logging
-import inspect
 import asyncio
 from typing import Tuple, Optional, List, Dict, Any
 from datetime import datetime
@@ -39,50 +38,18 @@ class UserHandlers:
         self.smart_email_service = SmartEmailComplaintService(self.email_manager)
         self.translator = TranslationService()
         
-        self.report_manager = ReportManager(
-            self.session_manager, 
-            self.email_manager, 
-        )
-        
+        self.report_manager = ReportManager(self.db, self.session_manager)
+
         self.payment_service = PaymentService(config.CRYPTOBOT_TOKEN)
         self.balance_service = BalanceService(self.db)
         self.stars_service = StarsPaymentService(self.bot, self.db, self.config)
-        
+
         # Конфигурация канала для подписки
         self.REQUIRED_CHANNEL = "@rabanoknews"
         self.REQUIRED_CHANNEL_ID = -1003682460294
-        
+
         logger.info("✅ UserHandlers инициализирован с системой ограничений")
-        
-        # Проверим что такое ReportManager
-        print("=" * 50)
-        print(f"ReportManager тип: {type(ReportManager)}")
-        print(f"ReportManager файл: {ReportManager.__module__}")
-        print(f"ReportManager расположение: {ReportManager.__file__ if hasattr(ReportManager, '__file__') else 'Нет'}")
-        print("=" * 50)
-        
-        # Посмотрим конструктор
-        if hasattr(ReportManager, '__init__'):
-            sig = inspect.signature(ReportManager.__init__)
-            print(f"ReportManager.__init__ параметры: {sig}")
-            print(f"Всего параметров: {len(sig.parameters)}")
-            print(f"Параметры кроме self: {len(sig.parameters)-1}")
-            print("=" * 50)
-        
-        # Теперь пробуем создать ReportManager
-        try:
-            # Сначала попробуем с 2 параметрами
-            self.report_manager = ReportManager(self.db, self.config)
-            print("✅ ReportManager создан с 2 параметрами")
-        except TypeError as e:
-            print(f"❌ Ошибка с 2 параметрами: {e}")
-            try:
-                # Попробуем с 3 параметрами
-                self.report_manager = ReportManager(self.session_manager, self.email_manager, self.db)
-                print("✅ ReportManager создан с 3 параметрами")
-            except TypeError as e2:
-                print(f"❌ Ошибка с 3 параметрами: {e2}")
-        
+
     async def check_admin_access(self, user_id: int, message_text: str = None) -> bool:
         """
         Проверка админских прав
