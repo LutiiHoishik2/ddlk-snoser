@@ -20,6 +20,7 @@ from services.report_manager import ReportManager
 from services.smart_email_service import SmartEmailComplaintService
 from services.payment_service import PaymentService
 from services.balance_service import BalanceService
+from services.stars_payment_service import StarsPaymentService
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ class UserHandlers:
         
         self.payment_service = PaymentService(config.CRYPTOBOT_TOKEN)
         self.balance_service = BalanceService(self.db)
-        self.stars_service = None
+        self.stars_service = StarsPaymentService(self.bot, self.db, self.config)
         
         # Конфигурация канала для подписки
         self.REQUIRED_CHANNEL = "@rabanoknews"
@@ -657,6 +658,13 @@ class UserHandlers:
                 asyncio.create_task(self.process_report_reason(callback, state, reason))
             elif data.startswith("check_payment_"):
                 asyncio.create_task(self.check_payment_status(callback, data))
+            elif data.startswith("pay_stars:"):
+                asyncio.create_task(self.handle_stars_payment(callback))
+            elif data.startswith("check_payment:"):
+                asyncio.create_task(self.check_payment_status(callback))
+            elif data.startswith("back_to_pay:"):
+                product_id = data.replace("back_to_pay:", "")
+                asyncio.create_task(self.show_stars_payment_menu(callback, product_id))
         
             # Админ функции - медленные операции
             elif data in ["admin_stats", "admin_users", "admin_sessions", "admin_emails", 
@@ -1451,15 +1459,31 @@ class UserHandlers:
         user_id = callback.from_user.id
         product_id = callback.data.replace("check_payment:", "")
         
-        # Получаем последний инвойс пользователя
-        invoices = self.db.get_user_invoices(user_id, limit=1)
-        
+        # Получаем последний релевантный инвойс пользователя
+        invoices = self.db.get_user_invoices(user_id, limit=20)
+
         if not invoices:
             await callback.answer("❌ Нет активных платежей", show_alert=True)
             return
-        
-        last_invoice = invoices[0]
-        invoice_id = last_invoice[2]  # invoice_id находится в третьей колонке
+
+        invoice_row = None
+        for row in invoices:
+            # row: id, user_id, invoice_id, product_id, stars_amount, usd_amount, status, ...
+            if row[3] == product_id and row[6] != "paid":
+                invoice_row = row
+                break
+
+        if invoice_row is None:
+            for row in invoices:
+                if row[3] == product_id:
+                    invoice_row = row
+                    break
+
+        if invoice_row is None:
+            await callback.answer("❌ Не найден счет для этого продукта", show_alert=True)
+            return
+
+        invoice_id = invoice_row[2]
         
         # Проверяем статус платежа
         is_paid, payment_data = await self.stars_service.verify_payment(invoice_id)

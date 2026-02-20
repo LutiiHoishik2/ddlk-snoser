@@ -15,15 +15,19 @@ import logging
 import asyncio
 import re
 import time
-# Попытка импортов telethon — если отсутствует, используем заглушки
-try:
-	from telethon import TelegramClient
-	from telethon.errors import SessionPasswordNeededError
-except Exception:
-	TelegramClient = None
-	SessionPasswordNeededError = Exception
+import importlib
 
 logger = logging.getLogger(__name__)
+
+def _load_telethon():
+    """Ленивая загрузка telethon зависимостей."""
+    try:
+        telethon_module = importlib.import_module("telethon")
+        telethon_errors = importlib.import_module("telethon.errors")
+        return telethon_module.TelegramClient, telethon_errors.SessionPasswordNeededError
+    except ImportError as exc:
+        raise RuntimeError("telethon не установлен. Установите пакет telethon для работы с сессиями.") from exc
+
 
 class AdminHandlers:
     def __init__(self, bot: Bot, db: Database, config: Config):
@@ -157,7 +161,7 @@ class AdminHandlers:
             elif data == "admin_test_emails":
                 await self.test_emails(callback)
             elif data == "admin_upload_emails":
-                await self.admin_upload_emails(callback)
+                await self.admin_upload_emails(callback, state)
             elif data == "admin_emails_stats":
                 await self.admin_emails_stats(callback)
             elif data == "admin_clean_emails":
@@ -1142,6 +1146,7 @@ class AdminHandlers:
             await state.update_data(phone=phone)
             
             # Создаем клиент Telegram
+            TelegramClient, _ = _load_telethon()
             session_name = f"session_{int(time.time())}"
             session_path = os.path.join(self.config.SESSIONS_DIR, f"{session_name}.session")
             
@@ -1225,6 +1230,8 @@ class AdminHandlers:
                 return
             
             # Пытаемся войти с кодом
+            _, SessionPasswordNeededError = _load_telethon()
+
             try:
                 await client.sign_in(
                     phone=phone,
@@ -1332,6 +1339,8 @@ class AdminHandlers:
                 return
             
             # Пытаемся войти с паролем
+            _, SessionPasswordNeededError = _load_telethon()
+
             try:
                 await client.sign_in(password=password)
                 
@@ -1450,7 +1459,7 @@ class AdminHandlers:
             logger.error(f"Error showing emails: {e}")
             await callback.message.edit_text("❌ Ошибка загрузки почт", reply_markup=self.keyboards.back_to_admin())
 
-    async def admin_upload_emails(self, callback: CallbackQuery):
+    async def admin_upload_emails(self, callback: CallbackQuery, state: FSMContext):
         """Загрузка email через файл"""
         logger.info(f"🔍 DEBUG: admin_upload_emails вызван для {callback.from_user.id}")
         await callback.message.edit_text(
@@ -1464,7 +1473,7 @@ class AdminHandlers:
                 [InlineKeyboardButton(text="◀️ НАЗАД", callback_data="admin_emails")]
             ])
         )
-        await callback.message._state.set_state(AdminStates.waiting_for_emails_file)
+        await state.set_state(AdminStates.waiting_for_emails_file)
 
     async def admin_emails_stats(self, callback: CallbackQuery):
         """Статистика email"""
@@ -1755,6 +1764,74 @@ class AdminHandlers:
         )
         await state.set_state(AdminStates.waiting_for_manual_emails)
         
+    async def process_emails_file(self, message: Message, state: FSMContext):
+        """Обработка файла с почтами в формате email:password"""
+        try:
+            if not message.document:
+                await message.answer(
+                    "❌ Отправьте TXT файл с почтами в формате email:password",
+                    reply_markup=self.keyboards.back_to_admin()
+                )
+                return
+
+            file = await self.bot.get_file(message.document.file_id)
+            file_data = await self.bot.download_file(file.file_path)
+            raw_bytes = file_data.read()
+            text = raw_bytes.decode("utf-8", errors="ignore")
+
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            added_count = 0
+            duplicate_count = 0
+            invalid_count = 0
+
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+
+            for line in lines:
+                if ":" not in line:
+                    invalid_count += 1
+                    continue
+
+                email, password = line.split(":", 1)
+                email = email.strip().lower()
+                password = password.strip()
+
+                if not email or "@" not in email or not password:
+                    invalid_count += 1
+                    continue
+
+                cursor.execute("SELECT 1 FROM admin_emails WHERE email = ?", (email,))
+                if cursor.fetchone():
+                    duplicate_count += 1
+                    continue
+
+                cursor.execute(
+                    "INSERT INTO admin_emails (email, password, status) VALUES (?, ?, ?)",
+                    (email, password, "pending")
+                )
+                added_count += 1
+
+            conn.commit()
+            conn.close()
+
+            await message.answer(
+                "✅ <b>Файл обработан</b>\n\n"
+                f"📥 Строк: {len(lines)}\n"
+                f"🟢 Добавлено: {added_count}\n"
+                f"🟡 Дубликатов: {duplicate_count}\n"
+                f"🔴 Невалидных: {invalid_count}",
+                parse_mode="HTML",
+                reply_markup=self.keyboards.back_to_admin()
+            )
+            await state.clear()
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка process_emails_file: {e}")
+            await message.answer(
+                "❌ Ошибка обработки файла с почтами",
+                reply_markup=self.keyboards.back_to_admin()
+            )
+
     async def process_email_input(self, message: Message, state: FSMContext):
         """Обработка ручного ввода email"""
         try:
