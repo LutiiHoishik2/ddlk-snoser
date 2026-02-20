@@ -1,6 +1,4 @@
 # handlers/nuke_handlers.py
-from services.session_nuker import TelegramSupportNuker
-from utils.states import UserNukeStates
 from utils.keyboards import Keyboards
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -8,10 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from services.session_nuker import session_nuker
-from core.database import Database
 
 router = Router()
-db = Database("rabanok.db")  # Создаем экземпляр
 
 class NukeStates(StatesGroup):
     waiting_for_phone = State()
@@ -83,9 +79,6 @@ async def process_nuke_username(message: Message, state: FSMContext):
         username = ""
     
     await state.update_data(username=username)
-    
-    # Показываем выбор шаблона
-    templates_ru = session_nuker.get_available_templates("ru")
     
     text = "📝 <b>Выберите язык жалобы:</b>"
     await message.answer(text, reply_markup=Keyboards.language_selection())
