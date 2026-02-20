@@ -121,11 +121,11 @@ class RabanokBot:
         
         # Управление почтами - ВСЕ КНОПКИ
         self.dp.callback_query.register(self.admin_handlers.show_admin_emails, F.data == "admin_emails")
-        self.dp.callback_query.register(self.admin_handlers.show_emails_stats, F.data == "admin_emails_stats")
-        self.dp.callback_query.register(self.admin_handlers.clean_invalid_emails, F.data == "admin_clean_emails")
-        self.dp.callback_query.register(self.admin_handlers.export_valid_emails, F.data == "admin_export_emails")
+        self.dp.callback_query.register(self.admin_handlers.admin_emails_stats, F.data == "admin_emails_stats")
+        self.dp.callback_query.register(self.admin_handlers.admin_clean_emails, F.data == "admin_clean_emails")
+        self.dp.callback_query.register(self.admin_handlers.admin_export_emails, F.data == "admin_export_emails")
         self.dp.callback_query.register(self.admin_handlers.start_manual_emails, F.data == "admin_manual_emails")
-        self.dp.callback_query.register(self.admin_handlers.start_add_email, F.data == "admin_upload_emails")
+        self.dp.callback_query.register(self.admin_handlers.admin_upload_emails, F.data == "admin_upload_emails")
         self.dp.callback_query.register(self.admin_handlers.list_emails, F.data == "admin_list_emails")
         self.dp.callback_query.register(self.admin_handlers.test_emails, F.data == "admin_test_emails")
         self.dp.callback_query.register(self.admin_handlers.show_admin_emails, F.data == "admin_emails_menu")
@@ -153,46 +153,12 @@ class RabanokBot:
         )
     
         # === СОСТОЯНИЯ АДМИНОВ ===
-        # Управление пользователями
-        self.dp.message.register(
-            self.admin_handlers.process_user_id,
-            state=AdminStates.waiting_for_user_id
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_balance_amount,
-            state=AdminStates.waiting_for_balance_amount
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_ban_user,
-            state=AdminStates.waiting_for_ban_user
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_unban_user,
-            state=AdminStates.waiting_for_unban_user
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_delete_user,
-            state=AdminStates.waiting_for_delete_user
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_set_balance,
-            state=AdminStates.waiting_for_set_balance
-        )
-        
         # Управление подписками
         self.dp.message.register(
             self.admin_handlers.process_subscription_user,
             state=AdminStates.waiting_for_subscription_user
         )
-        self.dp.message.register(
-            self.admin_handlers.process_subscription_plan,
-            state=AdminStates.waiting_for_subscription_plan
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_subscription_type,
-            state=AdminStates.waiting_for_subscription_type
-        )
-    
+
         # Управление сессиями
         self.dp.message.register(
             self.admin_handlers.process_session_phone,
@@ -203,26 +169,26 @@ class RabanokBot:
             state=AdminStates.waiting_for_session_code
         )
         self.dp.message.register(
-            self.admin_handlers.process_session_file,
-            state=AdminStates.waiting_for_session_file
+            self.admin_handlers.process_session_password,
+            state=AdminStates.waiting_for_session_password
         )
-    
+
         # Управление почтами
-        self.dp.message.register(
-            self.admin_handlers.process_email_input,
-            state=EmailStates.waiting_email_input
-        )
-        self.dp.message.register(
-            self.admin_handlers.process_email_password,
-            state=EmailStates.waiting_email_password
-        )
         self.dp.message.register(
             self.admin_handlers.process_emails_file,
             state=AdminStates.waiting_for_emails_file
         )
         self.dp.message.register(
-            self.admin_handlers.process_manual_emails,
+            self.admin_handlers.process_email_input,
             state=AdminStates.waiting_for_manual_emails
+        )
+        self.dp.message.register(
+            self.admin_handlers.process_email_password,
+            state=AdminStates.waiting_for_email_password
+        )
+        self.dp.message.register(
+            self.admin_handlers.process_single_email,
+            state=AdminStates.waiting_for_single_email
         )
     
         # === ОБРАБОТКА НЕИЗВЕСТНЫХ КОМАНД ===
@@ -337,7 +303,7 @@ class RabanokBot:
             # Проверяем, что это pre_checkout_query
             if "pre_checkout_query" in update_data:
                 # Обработка через payment_handlers
-                success, message = await self.payment_handlers.process_stars_payment_webhook(update_data)
+                success, message = await self.user_handlers.stars_service.process_stars_payment_webhook(update_data)
                 
                 if success:
                     return {"status": "success", "message": message}
@@ -364,6 +330,9 @@ class RabanokBot:
         if not translation_ok:
             logger.warning("⚠️ Сервис переводов не инициализирован корректно")
         
+        # Инициализация Stars платежей
+        await self.user_handlers.stars_service.initialize()
+
         # Автоматическая проверка части почт при старте
         logger.info("📧 Проверка части почт на валидность...")
         
@@ -440,6 +409,8 @@ class RabanokBot:
             logger.error(f"❌ Критическая ошибка запуска бота: {e}", exc_info=True)
             raise
         finally:
+            if hasattr(self, 'user_handlers') and getattr(self.user_handlers, 'stars_service', None):
+                await self.user_handlers.stars_service.close()
             if hasattr(self, 'bot'):
                 await self.bot.session.close()
                 logger.info("🔌 Сессия бота закрыта")
