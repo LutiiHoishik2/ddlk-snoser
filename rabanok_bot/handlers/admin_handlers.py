@@ -15,15 +15,19 @@ import logging
 import asyncio
 import re
 import time
-# Попытка импортов telethon — если отсутствует, используем заглушки
-try:
-	from telethon import TelegramClient
-	from telethon.errors import SessionPasswordNeededError
-except Exception:
-	TelegramClient = None
-	SessionPasswordNeededError = Exception
+import importlib
 
 logger = logging.getLogger(__name__)
+
+def _load_telethon():
+    """Ленивая загрузка telethon зависимостей."""
+    try:
+        telethon_module = importlib.import_module("telethon")
+        telethon_errors = importlib.import_module("telethon.errors")
+        return telethon_module.TelegramClient, telethon_errors.SessionPasswordNeededError
+    except ImportError as exc:
+        raise RuntimeError("telethon не установлен. Установите пакет telethon для работы с сессиями.") from exc
+
 
 class AdminHandlers:
     def __init__(self, bot: Bot, db: Database, config: Config):
@@ -157,7 +161,7 @@ class AdminHandlers:
             elif data == "admin_test_emails":
                 await self.test_emails(callback)
             elif data == "admin_upload_emails":
-                await self.admin_upload_emails(callback)
+                await self.admin_upload_emails(callback, state)
             elif data == "admin_emails_stats":
                 await self.admin_emails_stats(callback)
             elif data == "admin_clean_emails":
@@ -1142,6 +1146,7 @@ class AdminHandlers:
             await state.update_data(phone=phone)
             
             # Создаем клиент Telegram
+            TelegramClient, _ = _load_telethon()
             session_name = f"session_{int(time.time())}"
             session_path = os.path.join(self.config.SESSIONS_DIR, f"{session_name}.session")
             
@@ -1225,6 +1230,8 @@ class AdminHandlers:
                 return
             
             # Пытаемся войти с кодом
+            _, SessionPasswordNeededError = _load_telethon()
+
             try:
                 await client.sign_in(
                     phone=phone,
@@ -1332,6 +1339,8 @@ class AdminHandlers:
                 return
             
             # Пытаемся войти с паролем
+            _, SessionPasswordNeededError = _load_telethon()
+
             try:
                 await client.sign_in(password=password)
                 
@@ -1450,7 +1459,7 @@ class AdminHandlers:
             logger.error(f"Error showing emails: {e}")
             await callback.message.edit_text("❌ Ошибка загрузки почт", reply_markup=self.keyboards.back_to_admin())
 
-    async def admin_upload_emails(self, callback: CallbackQuery):
+    async def admin_upload_emails(self, callback: CallbackQuery, state: FSMContext):
         """Загрузка email через файл"""
         logger.info(f"🔍 DEBUG: admin_upload_emails вызван для {callback.from_user.id}")
         await callback.message.edit_text(
@@ -1464,7 +1473,7 @@ class AdminHandlers:
                 [InlineKeyboardButton(text="◀️ НАЗАД", callback_data="admin_emails")]
             ])
         )
-        await callback.message._state.set_state(AdminStates.waiting_for_emails_file)
+        await state.set_state(AdminStates.waiting_for_emails_file)
 
     async def admin_emails_stats(self, callback: CallbackQuery):
         """Статистика email"""
